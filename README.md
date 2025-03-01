@@ -1,6 +1,6 @@
 # Ollamem
 
-Accurately estimate the memory required to run GGUF models using Ollama's original memory estimation functions.
+Accurately estimate the memory required to run GGUF models and the maximum context length possible using Ollama's original memory estimation functions.
 
 Since this project is using Ollama's original `llm.EstimateGPULayers` function, it should get the exact estimation results as Ollama.
 
@@ -22,6 +22,15 @@ git clone https://github.com/k4yt3x/ollamem.git
 cd ollamem
 go build -ldflags="-s -w" -trimpath -o bin/ollamem ./cmd/ollamem
 ```
+
+## Quick Start
+
+Let's say you have a GPU and you would like to run the model fully offloaded to GPU without spilling into system RAM because that kills the inference speed:
+
+1. Unload all models from VRAM with `ollama stop` or just stop the Ollama service.
+2. Run 'ollamem' with the model you want to run to get the max context length.
+3. Use the estimated max context length to run the model with Ollama (`num_ctx`).
+4. Now the model should run with the max possible context length without spilling into system RAM.
 
 ## Usage
 
