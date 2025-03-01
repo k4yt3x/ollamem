@@ -3,12 +3,12 @@ package main
 import (
 	"flag"
 	"fmt"
-	"math"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
 	"github.com/ollama/ollama/api"
 	"github.com/ollama/ollama/discover"
+	"github.com/ollama/ollama/format"
 	"github.com/ollama/ollama/llm"
 	"github.com/ollama/ollama/server"
 )
@@ -17,6 +17,8 @@ type Flags struct {
 	contextLength int
 	modelName     string
 	modelPath     string
+	forceCPU      bool
+	forceGPU      bool
 	verbose       bool
 }
 
@@ -26,6 +28,8 @@ func main() {
 	flag.IntVar(&flags.contextLength, "c", 2048, "context length for model")
 	flag.StringVar(&flags.modelName, "m", "", "name of the Ollama model file")
 	flag.StringVar(&flags.modelPath, "f", "", "path to the GGUF model file")
+	flag.BoolVar(&flags.forceCPU, "cpu", false, "force CPU mode")
+	flag.BoolVar(&flags.forceGPU, "gpu", false, "force GPU mode")
 	flag.BoolVar(&flags.verbose, "v", false, "display all estimates")
 	flag.Parse()
 
@@ -50,26 +54,43 @@ func main() {
 		panic(err)
 	}
 
-	// Estimate the memory required for the model
-	gpus := []discover.GpuInfo{
-		{
-			Library: "cpu",
-		},
+	// Check if the both CPU and GPU are forced
+	if flags.forceCPU && flags.forceGPU {
+		fmt.Fprintln(os.Stderr, "Please provide only one of -cpu or -gpu")
+		return
 	}
+
+	// Discover the available GPUs
+	var gpus discover.GpuInfoList
+	switch {
+	case flags.forceCPU:
+		gpus = discover.GetCPUInfo()
+	case flags.forceGPU:
+		gpus = discover.GetGPUInfo()
+	default:
+		gpus = discover.GetGPUInfo()
+		if len(gpus) == 0 {
+			gpus = discover.GetCPUInfo()
+		}
+	}
+
+	// Estimate the memory required for the model
 	projectors := []string{}
 	opts := api.DefaultOptions()
 	opts.Runner.NumCtx = flags.contextLength
 	estimate := llm.EstimateGPULayers(gpus, ggmlFile, projectors, opts)
 
 	// Print the total memory estimate
-	fmt.Printf("Estimated required memory: %d bytes\n", estimate.TotalSize)
-	fmt.Printf("Estimated required memory: %f KiB\n", float64(estimate.TotalSize)/1024)
-	fmt.Printf("Estimated required memory: %f MiB\n", float64(estimate.TotalSize)/math.Pow(1024, 2))
-	fmt.Printf("Estimated required memory: %f GiB\n", float64(estimate.TotalSize)/math.Pow(1024, 3))
+	fmt.Printf(
+		"Estimated required memory: %d bytes (%s)\n",
+		estimate.TotalSize,
+		format.HumanBytes2(estimate.TotalSize),
+	)
 
 	// Dump all estimates if in verbose mode
 	if flags.verbose {
 		fmt.Println("\nFull Memory Estimate:")
+		fmt.Println(estimate.LogValue().String())
 		spew.Dump(estimate)
 	}
 }
