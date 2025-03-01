@@ -25,7 +25,7 @@ type Flags struct {
 //nolint:forbidigo // fmt is used for printing
 func main() {
 	flags := Flags{}
-	flag.IntVar(&flags.contextLength, "c", 2048, "context length for model")
+	flag.IntVar(&flags.contextLength, "c", 2048, "context length")
 	flag.StringVar(&flags.modelName, "m", "", "name of the Ollama model file")
 	flag.StringVar(&flags.modelPath, "f", "", "path to the GGUF model file")
 	flag.BoolVar(&flags.forceCPU, "cpu", false, "force CPU mode")
