@@ -3,6 +3,9 @@ package main
 import (
 	"flag"
 	"fmt"
+	"io"
+	"log"
+	"math"
 	"os"
 
 	"github.com/davecgh/go-spew/spew"
@@ -33,6 +36,9 @@ func main() {
 	flag.BoolVar(&flags.verbose, "v", false, "display all estimates")
 	flag.Parse()
 
+	// Disable logger output
+	log.SetOutput(io.Discard)
+
 	var modelPath string
 	switch {
 	case flags.modelName != "":
@@ -60,8 +66,16 @@ func main() {
 		return
 	}
 
+	// Estimate the memory required for the model
+	// Here the GPUs needs to be set to the CPU to get an accurate estimate
+	gpus := discover.GetCPUInfo()
+	projectors := []string{}
+	opts := api.DefaultOptions()
+	opts.Runner.NumCtx = flags.contextLength
+	estimate := llm.EstimateGPULayers(gpus, ggmlFile, projectors, opts)
+	totalSize := estimate.TotalSize
+
 	// Discover the available GPUs
-	var gpus discover.GpuInfoList
 	switch {
 	case flags.forceCPU:
 		gpus = discover.GetCPUInfo()
@@ -74,18 +88,30 @@ func main() {
 		}
 	}
 
-	// Estimate the memory required for the model
-	projectors := []string{}
-	opts := api.DefaultOptions()
-	opts.Runner.NumCtx = flags.contextLength
-	estimate := llm.EstimateGPULayers(gpus, ggmlFile, projectors, opts)
+	// Estimate the maximum context length
+	maxCtxLength := 0
+	left, right := 0, math.MaxInt32
 
-	// Print the total memory estimate
+	for left <= right {
+		mid := left + (right-left)/2
+		opts.Runner.NumCtx = mid
+		estimate = llm.EstimateGPULayers(gpus, ggmlFile, projectors, opts)
+
+		if estimate.TotalSize < gpus[0].FreeMemory {
+			left = mid + 1
+			maxCtxLength = mid
+		} else {
+			right = mid - 1
+		}
+	}
+
+	// Print the total memory estimates
 	fmt.Printf(
 		"Estimated required memory: %d bytes (%s)\n",
-		estimate.TotalSize,
-		format.HumanBytes2(estimate.TotalSize),
+		totalSize,
+		format.HumanBytes2(totalSize),
 	)
+	fmt.Printf("Estimated maximum context length with free memory: %d\n", maxCtxLength)
 
 	// Dump all estimates if in verbose mode
 	if flags.verbose {
