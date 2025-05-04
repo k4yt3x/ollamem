@@ -1,5 +1,5 @@
 build:
-	go build -ldflags="-s -w" -trimpath -o bin/ollamem ./cmd/ollamem
+	CGO_LDFLAGS=-static go build -ldflags="-s -w" -trimpath -o bin/ollamem ./cmd/ollamem
 
 debug:
 	go build -o bin/ollamem ./cmd/ollamem
